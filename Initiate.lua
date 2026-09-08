@@ -1,7 +1,6 @@
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
-local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 local env = getgenv and getgenv() or _G
@@ -26,11 +25,6 @@ if env.__EvadeCameraSpeedControl then
 
     oldState.running = false
 
-    pcall(function()
-        if oldState.bindName then
-            RunService:UnbindFromRenderStep(oldState.bindName)
-        end
-    end)
 end
 
 local state = {
@@ -39,10 +33,7 @@ local state = {
     cameraInput = nil,
     originalGetRotation = nil,
     wrapper = nil,
-    gui = nil,
-    lastRotationCall = -math.huge,
-    legacyPrevRotation = nil,
-    bindName = "__EvadeCameraSpeedControlLegacy"
+    gui = nil
 }
 
 env.__EvadeCameraSpeedControl = state
@@ -111,7 +102,6 @@ local function attachCameraInput()
     local original = cameraInput.getRotation
 
     local function wrapper(...)
-        state.lastRotationCall = os.clock()
         return original(...) * state.multiplier
     end
 
@@ -253,7 +243,6 @@ local function setValue(value)
     value = math.floor(value * 10 + 0.5) / 10
 
     state.multiplier = value
-    state.legacyPrevRotation = nil
 
     local alpha = (value - MIN) / (MAX - MIN)
 
@@ -363,78 +352,5 @@ task.spawn(function()
         task.wait(0.5)
     end
 end)
-
-pcall(function()
-    RunService:UnbindFromRenderStep(state.bindName)
-end)
-
-RunService:BindToRenderStep(
-    state.bindName,
-    Enum.RenderPriority.Last.Value,
-    function()
-        if not state.running then
-            return
-        end
-
-        local camera = workspace.CurrentCamera
-
-        if not camera then
-            state.legacyPrevRotation = nil
-            return
-        end
-
-        local current = camera.CFrame
-        local currentRotation = current.Rotation
-        local standardCameraActive =
-            os.clock() - state.lastRotationCall < 0.2
-
-        if state.multiplier == 1
-            or standardCameraActive
-        then
-            state.legacyPrevRotation = currentRotation
-            return
-        end
-
-        local previousRotation =
-            state.legacyPrevRotation
-
-        if not previousRotation then
-            state.legacyPrevRotation = currentRotation
-            return
-        end
-
-        local delta =
-            previousRotation:ToObjectSpace(currentRotation)
-
-        local axis, angle =
-            delta:ToAxisAngle()
-
-        if angle ~= angle
-            or angle > math.rad(60)
-        then
-            state.legacyPrevRotation = currentRotation
-            return
-        end
-
-        if math.abs(angle) < 0.000001 then
-            state.legacyPrevRotation = currentRotation
-            return
-        end
-
-        local scaledRotation =
-            previousRotation
-            * CFrame.fromAxisAngle(
-                axis,
-                angle * state.multiplier
-            )
-
-        camera.CFrame =
-            CFrame.new(current.Position)
-            * scaledRotation
-
-        state.legacyPrevRotation =
-            scaledRotation
-    end
-)
 
 attachCameraInput()
