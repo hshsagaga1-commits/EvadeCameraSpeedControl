@@ -18,6 +18,16 @@ if env.__EvadeCameraSpeedControl then
     end)
 
     pcall(function()
+        if oldState.baseCamera
+            and oldState.originalInputTranslation
+            and oldState.baseCamera.InputTranslationToCameraAngleChange == oldState.legacyWrapper
+        then
+            oldState.baseCamera.InputTranslationToCameraAngleChange =
+                oldState.originalInputTranslation
+        end
+    end)
+
+    pcall(function()
         if oldState.gui then
             oldState.gui:Destroy()
         end
@@ -33,6 +43,9 @@ local state = {
     cameraInput = nil,
     originalGetRotation = nil,
     wrapper = nil,
+    baseCamera = nil,
+    originalInputTranslation = nil,
+    legacyWrapper = nil,
     gui = nil
 }
 
@@ -109,6 +122,82 @@ local function attachCameraInput()
     state.originalGetRotation = original
     state.wrapper = wrapper
     cameraInput.getRotation = wrapper
+
+    return true
+end
+
+local function findBaseCamera()
+    local playerScripts = player:FindFirstChild("PlayerScripts")
+
+    if not playerScripts then
+        return nil
+    end
+
+    local playerModule = playerScripts:FindFirstChild("PlayerModule")
+
+    if not playerModule then
+        return nil
+    end
+
+    local cameraModule = playerModule:FindFirstChild("CameraModule")
+
+    if not cameraModule then
+        return nil
+    end
+
+    local baseCamera = cameraModule:FindFirstChild("BaseCamera")
+
+    if baseCamera and baseCamera:IsA("ModuleScript") then
+        return baseCamera
+    end
+
+    return nil
+end
+
+local function attachLegacyBaseCamera()
+    local module = findBaseCamera()
+
+    if not module then
+        return false
+    end
+
+    local ok, baseCamera = pcall(require, module)
+
+    if not ok
+        or type(baseCamera) ~= "table"
+        or type(baseCamera.InputTranslationToCameraAngleChange) ~= "function"
+    then
+        return false
+    end
+
+    if state.baseCamera == baseCamera
+        and baseCamera.InputTranslationToCameraAngleChange == state.legacyWrapper
+    then
+        return true
+    end
+
+    if state.baseCamera
+        and state.originalInputTranslation
+        and state.baseCamera.InputTranslationToCameraAngleChange == state.legacyWrapper
+    then
+        pcall(function()
+            state.baseCamera.InputTranslationToCameraAngleChange =
+                state.originalInputTranslation
+        end)
+    end
+
+    local original =
+        baseCamera.InputTranslationToCameraAngleChange
+
+    local function wrapper(self, translationVector, sensitivity)
+        return original(self, translationVector, sensitivity)
+            * state.multiplier
+    end
+
+    state.baseCamera = baseCamera
+    state.originalInputTranslation = original
+    state.legacyWrapper = wrapper
+    baseCamera.InputTranslationToCameraAngleChange = wrapper
 
     return true
 end
@@ -348,9 +437,20 @@ end)
 
 task.spawn(function()
     while state.running do
-        pcall(attachCameraInput)
+        local attached = false
+
+        pcall(function()
+            attached = attachCameraInput()
+        end)
+
+        if not attached then
+            pcall(attachLegacyBaseCamera)
+        end
+
         task.wait(0.5)
     end
 end)
 
-attachCameraInput()
+if not attachCameraInput() then
+    attachLegacyBaseCamera()
+end
