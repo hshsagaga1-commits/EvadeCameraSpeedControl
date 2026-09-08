@@ -1,10 +1,13 @@
 # EvadeCameraSpeedControl
 
-Standalone camera sensitivity multiplier for Roblox.
+One loader, two camera systems.
 
-Range: 0.1x to 7.0x  
-Default: 1.0x  
-Step: 0.1x
+- Overhaul: hooks `CameraInput.getRotation`
+- Legacy: hooks `BaseCamera.InputTranslationToCameraAngleChange`
+- Auto-detects which camera architecture is available
+- Range: 0.1x to 7.0x
+- Default: 1.0x
+- Step: 0.1x
 
 Loader:
 
