@@ -29,10 +29,10 @@ local state = {
 
 env.__EvadeLegacyPCStyleCamera = state
 
-local HORIZONTAL_LAG_TIME = 0.055
+local HORIZONTAL_LAG_TIME = 0.06
 local VERTICAL_LAG_TIME = 0.012
-local HORIZONTAL_RESPONSE = 16
-local VERTICAL_RESPONSE = 24
+local HORIZONTAL_RESPONSE = 12.5
+local VERTICAL_RESPONSE = 20
 local MAX_HORIZONTAL_OFFSET = 3.25
 local MAX_VERTICAL_OFFSET = 0.9
 local RESET_DISTANCE = 24
@@ -169,7 +169,7 @@ local function attach()
 
         if not data then
             data = {
-                position = realPosition,
+                offset = Vector3.new(),
                 lastReal = realPosition,
                 time = now
             }
@@ -184,32 +184,45 @@ local function attach()
             or dt > RESET_TIME
             or (realPosition - data.lastReal).Magnitude > RESET_DISTANCE
         then
-            data.position = realPosition
+            data.offset = Vector3.new()
             data.lastReal = realPosition
             return realPosition
         end
 
         dt = math.min(dt, 1 / 20)
 
+        local maxHorizontal = MAX_HORIZONTAL_OFFSET
+        local maxVertical = MAX_VERTICAL_OFFSET
+
+        if okDistance and type(distance) == "number" then
+            maxHorizontal = math.min(
+                MAX_HORIZONTAL_OFFSET,
+                math.max(0.85, distance * 0.24)
+            )
+
+            maxVertical = math.min(
+                MAX_VERTICAL_OFFSET,
+                math.max(0.3, distance * 0.07)
+            )
+        end
+
         local velocity = root.AssemblyLinearVelocity
         local horizontalVelocity = Vector3.new(velocity.X, 0, velocity.Z)
 
-        local desiredHorizontalOffset =
-            clampVectorXZ(-horizontalVelocity * HORIZONTAL_LAG_TIME, MAX_HORIZONTAL_OFFSET)
-
-        local desiredVerticalOffset =
-            math.clamp(
-                -velocity.Y * VERTICAL_LAG_TIME,
-                -MAX_VERTICAL_OFFSET,
-                MAX_VERTICAL_OFFSET
+        local desiredHorizontal =
+            clampVectorXZ(
+                -horizontalVelocity * HORIZONTAL_LAG_TIME,
+                maxHorizontal
             )
 
-        local desiredPosition =
-            realPosition
-            + desiredHorizontalOffset
-            + Vector3.new(0, desiredVerticalOffset, 0)
+        local desiredY =
+            math.clamp(
+                -velocity.Y * VERTICAL_LAG_TIME,
+                -maxVertical,
+                maxVertical
+            )
 
-        local current = data.position
+        local current = data.offset
 
         local horizontalAlpha =
             1 - math.exp(-HORIZONTAL_RESPONSE * dt)
@@ -219,38 +232,26 @@ local function attach()
 
         local nextHorizontal =
             Vector3.new(current.X, 0, current.Z):Lerp(
-                Vector3.new(desiredPosition.X, 0, desiredPosition.Z),
+                desiredHorizontal,
                 horizontalAlpha
             )
 
+        nextHorizontal =
+            clampVectorXZ(nextHorizontal, maxHorizontal)
+
         local nextY =
             current.Y
-            + (desiredPosition.Y - current.Y) * verticalAlpha
+            + (desiredY - current.Y) * verticalAlpha
 
-        local nextPosition =
-            Vector3.new(nextHorizontal.X, nextY, nextHorizontal.Z)
+        nextY = math.clamp(nextY, -maxVertical, maxVertical)
 
-        local offset = nextPosition - realPosition
+        local nextOffset =
+            nextHorizontal + Vector3.new(0, nextY, 0)
 
-        local clampedHorizontal =
-            clampVectorXZ(offset, MAX_HORIZONTAL_OFFSET)
-
-        local clampedY =
-            math.clamp(
-                offset.Y,
-                -MAX_VERTICAL_OFFSET,
-                MAX_VERTICAL_OFFSET
-            )
-
-        nextPosition =
-            realPosition
-            + clampedHorizontal
-            + Vector3.new(0, clampedY, 0)
-
-        data.position = nextPosition
+        data.offset = nextOffset
         data.lastReal = realPosition
 
-        return nextPosition
+        return realPosition + nextOffset
     end
 
     state.baseCamera = baseCamera
