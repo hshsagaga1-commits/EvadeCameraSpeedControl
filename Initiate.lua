@@ -34,7 +34,6 @@ if env.__EvadeCameraSpeedControl then
     end)
 
     oldState.running = false
-
 end
 
 local state = {
@@ -51,21 +50,39 @@ local state = {
 
 env.__EvadeCameraSpeedControl = state
 
-local function findCameraInput()
-    local playerScripts = player:FindFirstChild("PlayerScripts")
+-- No smoothing and no carried velocity: each frame is based only on the current
+-- camera delta. Small deltas are compressed so slow trimp steering has more
+-- usable finger travel, while large swipes keep their normal speed.
+local MICRO_GAIN = 0.38
+local MICRO_FULL_AT = 0.030
 
-    if not playerScripts then
-        return nil
+local function smoothstep(t)
+    t = math.clamp(t, 0, 1)
+    return t * t * (3 - 2 * t)
+end
+
+local function stabilizeRotation(rotation)
+    local scaled = rotation
+    local ok, magnitude = pcall(function() return rotation.Magnitude end)
+
+    if ok and type(magnitude) == "number" and magnitude > 0 and UserInputService.TouchEnabled then
+        local alpha = smoothstep(magnitude / MICRO_FULL_AT)
+        local precisionGain = MICRO_GAIN + (1 - MICRO_GAIN) * alpha
+        scaled = rotation * precisionGain
     end
 
-    local playerModule = playerScripts:FindFirstChild("PlayerModule")
+    return scaled * state.multiplier
+end
 
+local function findCameraInput()
+    local playerScripts = player:FindFirstChild("PlayerScripts")
+    if not playerScripts then return nil end
+
+    local playerModule = playerScripts:FindFirstChild("PlayerModule")
     if playerModule then
         local cameraModule = playerModule:FindFirstChild("CameraModule")
-
         if cameraModule then
             local cameraInput = cameraModule:FindFirstChild("CameraInput")
-
             if cameraInput and cameraInput:IsA("ModuleScript") then
                 return cameraInput
             end
@@ -83,39 +100,26 @@ end
 
 local function attachCameraInput()
     local module = findCameraInput()
-
-    if not module then
-        return false
-    end
+    if not module then return false end
 
     local ok, cameraInput = pcall(require, module)
-
-    if not ok
-        or type(cameraInput) ~= "table"
-        or type(cameraInput.getRotation) ~= "function"
-    then
+    if not ok or type(cameraInput) ~= "table" or type(cameraInput.getRotation) ~= "function" then
         return false
     end
 
-    if state.cameraInput == cameraInput
-        and cameraInput.getRotation == state.wrapper
-    then
+    if state.cameraInput == cameraInput and cameraInput.getRotation == state.wrapper then
         return true
     end
 
-    if state.cameraInput
-        and state.originalGetRotation
-        and state.cameraInput.getRotation == state.wrapper
-    then
+    if state.cameraInput and state.originalGetRotation and state.cameraInput.getRotation == state.wrapper then
         pcall(function()
             state.cameraInput.getRotation = state.originalGetRotation
         end)
     end
 
     local original = cameraInput.getRotation
-
     local function wrapper(...)
-        return original(...) * state.multiplier
+        return stabilizeRotation(original(...))
     end
 
     state.cameraInput = cameraInput
@@ -128,70 +132,41 @@ end
 
 local function findBaseCamera()
     local playerScripts = player:FindFirstChild("PlayerScripts")
-
-    if not playerScripts then
-        return nil
-    end
+    if not playerScripts then return nil end
 
     local playerModule = playerScripts:FindFirstChild("PlayerModule")
-
-    if not playerModule then
-        return nil
-    end
+    if not playerModule then return nil end
 
     local cameraModule = playerModule:FindFirstChild("CameraModule")
-
-    if not cameraModule then
-        return nil
-    end
+    if not cameraModule then return nil end
 
     local baseCamera = cameraModule:FindFirstChild("BaseCamera")
-
-    if baseCamera and baseCamera:IsA("ModuleScript") then
-        return baseCamera
-    end
-
+    if baseCamera and baseCamera:IsA("ModuleScript") then return baseCamera end
     return nil
 end
 
 local function attachLegacyBaseCamera()
     local module = findBaseCamera()
-
-    if not module then
-        return false
-    end
+    if not module then return false end
 
     local ok, baseCamera = pcall(require, module)
-
-    if not ok
-        or type(baseCamera) ~= "table"
-        or type(baseCamera.InputTranslationToCameraAngleChange) ~= "function"
-    then
+    if not ok or type(baseCamera) ~= "table" or type(baseCamera.InputTranslationToCameraAngleChange) ~= "function" then
         return false
     end
 
-    if state.baseCamera == baseCamera
-        and baseCamera.InputTranslationToCameraAngleChange == state.legacyWrapper
-    then
+    if state.baseCamera == baseCamera and baseCamera.InputTranslationToCameraAngleChange == state.legacyWrapper then
         return true
     end
 
-    if state.baseCamera
-        and state.originalInputTranslation
-        and state.baseCamera.InputTranslationToCameraAngleChange == state.legacyWrapper
-    then
+    if state.baseCamera and state.originalInputTranslation and state.baseCamera.InputTranslationToCameraAngleChange == state.legacyWrapper then
         pcall(function()
-            state.baseCamera.InputTranslationToCameraAngleChange =
-                state.originalInputTranslation
+            state.baseCamera.InputTranslationToCameraAngleChange = state.originalInputTranslation
         end)
     end
 
-    local original =
-        baseCamera.InputTranslationToCameraAngleChange
-
+    local original = baseCamera.InputTranslationToCameraAngleChange
     local function wrapper(self, translationVector, sensitivity)
-        return original(self, translationVector, sensitivity)
-            * state.multiplier
+        return stabilizeRotation(original(self, translationVector, sensitivity))
     end
 
     state.baseCamera = baseCamera
@@ -203,16 +178,10 @@ local function attachLegacyBaseCamera()
 end
 
 local parent
-
 pcall(function()
-    if gethui then
-        parent = gethui()
-    end
+    if gethui then parent = gethui() end
 end)
-
-if not parent then
-    parent = CoreGui
-end
+if not parent then parent = CoreGui end
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "EvadeCameraSpeedControl"
@@ -220,7 +189,6 @@ gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = false
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.Parent = parent
-
 state.gui = gui
 
 local frame = Instance.new("Frame")
@@ -315,7 +283,7 @@ local normalLabel = Instance.new("TextLabel")
 normalLabel.Size = UDim2.fromOffset(48, 20)
 normalLabel.Position = UDim2.new(1, -62, 0, 75)
 normalLabel.BackgroundTransparency = 1
-normalLabel.Text = "7.0x"
+normalLabel.Text = "2.0x"
 normalLabel.TextColor3 = Color3.fromRGB(150, 150, 158)
 normalLabel.TextSize = 11
 normalLabel.Font = Enum.Font.Gotham
@@ -323,7 +291,7 @@ normalLabel.TextXAlignment = Enum.TextXAlignment.Right
 normalLabel.Parent = frame
 
 local MIN = 0.1
-local MAX = 7
+local MAX = 2
 local STEP = 0.1
 
 local function setValue(value)
@@ -332,7 +300,6 @@ local function setValue(value)
     value = math.floor(value * 10 + 0.5) / 10
 
     state.multiplier = value
-
     local alpha = (value - MIN) / (MAX - MIN)
 
     fill.Size = UDim2.fromScale(alpha, 1)
@@ -343,27 +310,16 @@ end
 setValue(1)
 
 local sliding = false
-
 local function updateFromX(x)
     local width = bar.AbsoluteSize.X
+    if width <= 0 then return end
 
-    if width <= 0 then
-        return
-    end
-
-    local alpha = math.clamp(
-        (x - bar.AbsolutePosition.X) / width,
-        0,
-        1
-    )
-
+    local alpha = math.clamp((x - bar.AbsolutePosition.X) / width, 0, 1)
     setValue(MIN + (MAX - MIN) * alpha)
 end
 
 local function beginSlide(input)
-    if input.UserInputType == Enum.UserInputType.Touch
-        or input.UserInputType == Enum.UserInputType.MouseButton1
-    then
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
         sliding = true
         updateFromX(input.Position.X)
     end
@@ -373,21 +329,14 @@ bar.InputBegan:Connect(beginSlide)
 knob.InputBegan:Connect(beginSlide)
 
 UserInputService.InputChanged:Connect(function(input)
-    if not sliding then
-        return
-    end
-
-    if input.UserInputType == Enum.UserInputType.Touch
-        or input.UserInputType == Enum.UserInputType.MouseMovement
-    then
+    if not sliding then return end
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement then
         updateFromX(input.Position.X)
     end
 end)
 
 UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch
-        or input.UserInputType == Enum.UserInputType.MouseButton1
-    then
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
         sliding = false
     end
 end)
@@ -397,9 +346,7 @@ local dragStart
 local startPosition
 
 frame.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch
-        or input.UserInputType == Enum.UserInputType.MouseButton1
-    then
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
         if input.Position.Y <= bar.AbsolutePosition.Y - 8 then
             dragging = true
             dragStart = input.Position
@@ -409,15 +356,10 @@ frame.InputBegan:Connect(function(input)
 end)
 
 UserInputService.InputChanged:Connect(function(input)
-    if not dragging or not dragStart or not startPosition then
-        return
-    end
+    if not dragging or not dragStart or not startPosition then return end
 
-    if input.UserInputType == Enum.UserInputType.Touch
-        or input.UserInputType == Enum.UserInputType.MouseMovement
-    then
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement then
         local delta = input.Position - dragStart
-
         frame.Position = UDim2.new(
             startPosition.X.Scale,
             startPosition.X.Offset + delta.X,
@@ -428,9 +370,7 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch
-        or input.UserInputType == Enum.UserInputType.MouseButton1
-    then
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
         dragging = false
     end
 end)
@@ -438,15 +378,8 @@ end)
 task.spawn(function()
     while state.running do
         local attached = false
-
-        pcall(function()
-            attached = attachCameraInput()
-        end)
-
-        if not attached then
-            pcall(attachLegacyBaseCamera)
-        end
-
+        pcall(function() attached = attachCameraInput() end)
+        if not attached then pcall(attachLegacyBaseCamera) end
         task.wait(0.5)
     end
 end)
