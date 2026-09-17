@@ -49,11 +49,12 @@ end
 ]]
 
 local newPrecision=[[
--- Memoryless PC-like directional precision. It never carries velocity between
--- frames: near-axis touch gestures lose only their accidental minor component,
--- while real diagonals and the dominant component keep their native magnitude.
-local AXIS_LOCK_RATIO = 0.12
-local AXIS_RELEASE_RATIO = 0.42
+-- Soft, memoryless straightening. The dominant axis is never slowed and the
+-- minor axis is never hard-zeroed, so a real turn stays continuous instead of
+-- snapping from a straight line into a diagonal. Near-axis finger wobble is
+-- merely reduced.
+local STRAIGHTEN_MIN_GAIN = 0.50
+local STRAIGHTEN_FULL_RATIO = 0.52
 
 local function smoothstep(t)
     t = math.clamp(t, 0, 1)
@@ -69,17 +70,10 @@ local function stabilizeRotation(rotation)
         local major = math.max(ax, ay)
         local minor = math.min(ax, ay)
 
-        if major > 0 then
+        if major > 0 and minor > 0 then
             local ratio = minor / major
-            local minorGain
-
-            if ratio <= AXIS_LOCK_RATIO then
-                minorGain = 0
-            elseif ratio >= AXIS_RELEASE_RATIO then
-                minorGain = 1
-            else
-                minorGain = smoothstep((ratio - AXIS_LOCK_RATIO) / (AXIS_RELEASE_RATIO - AXIS_LOCK_RATIO))
-            end
+            local alpha = smoothstep(ratio / STRAIGHTEN_FULL_RATIO)
+            local minorGain = STRAIGHTEN_MIN_GAIN + (1 - STRAIGHTEN_MIN_GAIN) * alpha
 
             if ax >= ay then
                 scaled = Vector2.new(rotation.X, rotation.Y * minorGain)
@@ -92,7 +86,7 @@ local function stabilizeRotation(rotation)
     return scaled * state.multiplier
 end
 ]]
-source=replaceOncePlain(source,oldPrecision,newPrecision,"memoryless precision transform")
+source=replaceOncePlain(source,oldPrecision,newPrecision,"soft precision transform")
 
 source=replaceOncePlain(
     source,
