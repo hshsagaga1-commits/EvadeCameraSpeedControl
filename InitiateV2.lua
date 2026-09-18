@@ -52,9 +52,9 @@ local newPrecision=[[
 -- Soft, memoryless straightening. The dominant axis is never slowed and the
 -- minor axis is never hard-zeroed, so a real turn stays continuous instead of
 -- snapping from a straight line into a diagonal. Near-axis finger wobble is
--- merely reduced.
-local STRAIGHTEN_MIN_GAIN = 0.50
-local STRAIGHTEN_FULL_RATIO = 0.52
+-- merely reduced. The reference gameplay keeps real curves alive quickly, so\n-- correction fades out by a 0.30 minor/major ratio.
+local STRAIGHTEN_MIN_GAIN = 0.72
+local STRAIGHTEN_FULL_RATIO = 0.30
 
 local function smoothstep(t)
     t = math.clamp(t, 0, 1)
