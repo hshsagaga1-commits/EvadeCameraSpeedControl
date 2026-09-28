@@ -1,5 +1,5 @@
 local HttpService=game:GetService("HttpService")
-local ROOT="https://raw.githubusercontent.com/hshsagaga1-commits/EvadeCameraSpeedControl/main/"
+local ROOT="https://raw.githubusercontent.com/hshsagaga1-commits/EvadeCameraSpeedControl/feature/precision-v2/"
 
 local source=game:HttpGet(ROOT.."Initiate.lua?base="..HttpService:GenerateGUID(false),true)
 
