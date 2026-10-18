@@ -49,12 +49,14 @@ end
 ]]
 
 local newPrecision=[[
--- Soft, memoryless straightening. The dominant axis is never slowed and the
--- minor axis is never hard-zeroed, so a real turn stays continuous instead of
--- snapping from a straight line into a diagonal. Near-axis finger wobble is
--- merely reduced. The reference gameplay keeps real curves alive quickly, so\n-- correction fades out by a 0.30 minor/major ratio.
-local STRAIGHTEN_MIN_GAIN = 0.72
-local STRAIGHTEN_FULL_RATIO = 0.30
+-- Soft, memoryless precision with a light brake for fast touch swipes.
+-- Small adjustments stay responsive; big deltas are reduced gently without
+-- adding smoothing lag or locking diagonal movement.
+local STRAIGHTEN_MIN_GAIN = 0.80
+local STRAIGHTEN_FULL_RATIO = 0.26
+local FAST_MOVE_START = 0.06
+local FAST_MOVE_FULL = 0.32
+local FAST_MOVE_MIN_GAIN = 0.86
 
 local function smoothstep(t)
     t = math.clamp(t, 0, 1)
@@ -70,6 +72,7 @@ local function stabilizeRotation(rotation)
         local major = math.max(ax, ay)
         local minor = math.min(ax, ay)
 
+        -- Reduce near-axis wobble slightly, while keeping diagonal movement alive.
         if major > 0 and minor > 0 then
             local ratio = minor / major
             local alpha = smoothstep(ratio / STRAIGHTEN_FULL_RATIO)
@@ -80,6 +83,17 @@ local function stabilizeRotation(rotation)
             else
                 scaled = Vector2.new(rotation.X * minorGain, rotation.Y)
             end
+        end
+
+        -- Soft brake applies only to large per-frame movement deltas.
+        -- Fine movements remain untouched and there is no delayed camera follow.
+        local magnitude = scaled.Magnitude
+        if magnitude > FAST_MOVE_START then
+            local brake = smoothstep(
+                (magnitude - FAST_MOVE_START) / (FAST_MOVE_FULL - FAST_MOVE_START)
+            )
+            local gain = 1 - (1 - FAST_MOVE_MIN_GAIN) * brake
+            scaled = scaled * gain
         end
     end
 
