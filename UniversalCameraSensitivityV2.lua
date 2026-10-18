@@ -32,17 +32,9 @@ local function getPlayerModule()
 end
 
 local function isCameraInputTable(t)
-    if type(t) ~= "table" or type(t.getRotation) ~= "function" then return false end
-    local info
-    pcall(function() info = debug.getinfo(t.getRotation) end)
-    if info then
-        local source = tostring(info.source or "")
-        local name = tostring(info.name or "")
-        if source:lower():find("camera") or name:lower():find("rotation") then
-            return true
-        end
-    end
-    return false
+    -- Direct ModuleScript lookup already identifies CameraInput by name.
+    -- Keep this check executor-agnostic; debug.getinfo is not guaranteed.
+    return type(t) == "table" and type(t.getRotation) == "function"
 end
 
 local function findCameraInput()
