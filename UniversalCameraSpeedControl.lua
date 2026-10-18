@@ -43,8 +43,11 @@ local state = {
 }
 env[STATE_KEY] = state
 
-local STRAIGHTEN_MIN_GAIN = 0.72
-local STRAIGHTEN_FULL_RATIO = 0.30
+local STRAIGHTEN_MIN_GAIN = 0.80
+local STRAIGHTEN_FULL_RATIO = 0.26
+local FAST_MOVE_START = 0.06
+local FAST_MOVE_FULL = 0.32
+local FAST_MOVE_MIN_GAIN = 0.86
 
 local function smoothstep(t)
     t = math.clamp(t, 0, 1)
@@ -53,6 +56,7 @@ end
 
 local function transformRotation(rotation)
     if typeof(rotation) == "Vector2" and state.precisionEnabled and UserInputService.TouchEnabled then
+        -- Light axis correction: helps tiny aim adjustments without hard-locking diagonals.
         local ax, ay = math.abs(rotation.X), math.abs(rotation.Y)
         local major, minor = math.max(ax, ay), math.min(ax, ay)
         if major > 0 and minor > 0 then
@@ -65,6 +69,17 @@ local function transformRotation(rotation)
                 rotation = Vector2.new(rotation.X * minorGain, rotation.Y)
             end
         end
+
+        -- Soft brake only on unusually large per-frame deltas.
+        -- Small movements stay 1:1, with no added smoothing delay.
+        local magnitude = rotation.Magnitude
+        if magnitude > FAST_MOVE_START then
+            local alpha = smoothstep(
+                (magnitude - FAST_MOVE_START) / (FAST_MOVE_FULL - FAST_MOVE_START)
+            )
+            local gain = 1 - (1 - FAST_MOVE_MIN_GAIN) * alpha
+            rotation = rotation * gain
+        end
     end
 
     if typeof(rotation) == "Vector2" then
@@ -72,7 +87,6 @@ local function transformRotation(rotation)
     end
     return rotation
 end
-
 local function getPlayerModule()
     local scripts = player:FindFirstChildOfClass("PlayerScripts")
     if not scripts then return nil end
