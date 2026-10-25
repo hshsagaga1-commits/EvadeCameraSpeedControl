@@ -4,7 +4,7 @@ Overhaul camera control, updated for the PC-on-mobile rebuild.
 
 - Native CameraInput path; does not replace Camera.CFrame
 - Sensitivity slider: 0.1x to 2.0x
-- Precision removes only tiny cross-axis noise; no micro-movement slowdown
+- Stronger precision removes a wider band of tiny cross-axis noise (axis snap ratio 0.18; minor-axis threshold 0.010); no temporal smoothing or micro-movement slowdown
 - No temporal smoothing / carried velocity
 - Joystick and jump touches are isolated from camera rotation
 - Includes the experimental re-touch first-delta guard: on a camera-area touch, it drops only the first non-zero rotation sample to test/avoid the brief camera spike observed during bhop/trimp
