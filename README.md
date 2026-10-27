@@ -2,7 +2,7 @@
 
 Unified Evade camera sensitivity for Legacy and Overhaul, updated for the PC-on-mobile rebuild.
 
-- Native CameraInput path; does not replace Camera.CFrame
+- Overhaul uses the native CameraInput path; Legacy scales BaseCamera input translation directly; neither path replaces Camera.CFrame
 - Sensitivity slider: 0.1x to 2.0x
 - Stronger precision removes a wider band of tiny cross-axis noise (axis snap ratio 0.18; minor-axis threshold 0.010); no temporal smoothing or micro-movement slowdown
 - No temporal smoothing / carried velocity
